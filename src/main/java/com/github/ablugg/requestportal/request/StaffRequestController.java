@@ -12,9 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Back-office endpoints: see the queue and move requests through their lifecycle.
- *
- * NOTE: these are not protected yet. Stage 2 adds staff login with Spring Security;
- * until then, run this on your own machine only.
+ * Protected by Spring Security: requires STAFF role via HTTP Basic authentication.
  */
 @RestController
 @RequestMapping("/api/staff/requests")

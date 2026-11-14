@@ -1,0 +1,7 @@
+CREATE TABLE staff_users (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username    VARCHAR(64)  NOT NULL UNIQUE,
+    password    VARCHAR(256) NOT NULL,
+    role        VARCHAR(32)  NOT NULL DEFAULT 'STAFF',
+    created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);

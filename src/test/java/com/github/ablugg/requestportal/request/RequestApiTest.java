@@ -3,6 +3,8 @@ package com.github.ablugg.requestportal.request;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,17 +18,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 /**
- * End-to-end API tests. @SpringBootTest starts the whole application (controllers,
- * service, repository, in-memory database) and MockMvc sends it HTTP requests without
- * opening a real network port. Each test maps to an acceptance criterion in
- * docs/user-stories.md.
+ * End-to-end API tests. Uses H2 in PostgreSQL-compatibility mode (test profile)
+ * and Spring Security with a seeded admin account.
  */
 @SpringBootTest
+@ActiveProfiles("test")
 class RequestApiTest {
 
     private static final String VALID_BODY = """
@@ -45,7 +47,9 @@ class RequestApiTest {
 
     @BeforeEach
     void setUp() {
-        mvc = MockMvcBuilders.webAppContextSetup(context).build();
+        mvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(springSecurity())
+                .build();
     }
 
     // --- Story 1: submit a request -------------------------------------------------
@@ -111,12 +115,14 @@ class RequestApiTest {
     void staffCanListRequestsFilteredByStatus() throws Exception {
         String reference = submitAndGetReference();
 
-        mvc.perform(get("/api/staff/requests").param("status", "SUBMITTED"))
+        mvc.perform(get("/api/staff/requests").param("status", "SUBMITTED")
+                        .with(httpBasic("admin", "admin")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].reference", hasItem(reference)))
                 .andExpect(jsonPath("$[0].contactEmail").exists());
 
-        mvc.perform(get("/api/staff/requests").param("status", "CLOSED"))
+        mvc.perform(get("/api/staff/requests").param("status", "CLOSED")
+                        .with(httpBasic("admin", "admin")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].reference", not(hasItem(reference))));
     }
@@ -150,6 +156,21 @@ class RequestApiTest {
         changeStatus("SR-ZZZZZZZZ", "IN_PROGRESS").andExpect(status().isNotFound());
     }
 
+    // --- Story 5: staff endpoints require authentication ---------------------------
+
+    @Test
+    void staffEndpointsRejectUnauthenticatedRequests() throws Exception {
+        mvc.perform(get("/api/staff/requests"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void staffEndpointsRejectBadCredentials() throws Exception {
+        mvc.perform(get("/api/staff/requests")
+                        .with(httpBasic("admin", "wrong")))
+                .andExpect(status().isUnauthorized());
+    }
+
     // --- helpers --------------------------------------------------------------------
 
     private String submitAndGetReference() throws Exception {
@@ -164,6 +185,7 @@ class RequestApiTest {
             throws Exception {
         return mvc.perform(patch("/api/staff/requests/{reference}/status", reference)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"status\": \"" + status + "\"}"));
+                .content("{\"status\": \"" + status + "\"}")
+                .with(httpBasic("admin", "admin")));
     }
 }
